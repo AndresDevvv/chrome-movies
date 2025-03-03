@@ -527,6 +527,22 @@
             }
         }
 
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        
+        .pulse {
+            animation: pulse 0.3s ease-in-out;
+        }
+
         @media (max-width: 768px) {
             .detail-content {
                 grid-template-columns: 1fr;
@@ -578,11 +594,52 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .logo-container:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .logo-container::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--color-accent);
+            transition: width 0.3s ease;
+        }
+        
+        .logo-container:hover::after {
+            width: 100%;
         }
         
         .logo-text {
             font-weight: 700;
             font-size: 1.25rem;
+            transition: color 0.3s ease;
+        }
+        
+        .logo-container:hover .logo-text {
+            color: var(--color-accent);
+        }
+        
+        .logo-img {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+        
+        .logo-container:hover .logo-img {
+            transform: rotate(10deg);
         }
 
         .user-profile {
@@ -667,13 +724,6 @@
             <!-- Movie Detail Page -->
             <div id="movie-detail" class="page hidden">
                 <div class="detail-container">
-                    <div class="detail-header">
-                        <a href="#" id="back-button" class="back-btn">
-                            <i class="fas fa-arrow-left"></i>
-                            <span>Back to browse</span>
-                        </a>
-                    </div>
-                    
                     <div class="detail-content">
                         <div class="detail-poster-container">
                             <div id="movie-poster" class="detail-poster shimmer"></div>
@@ -747,9 +797,10 @@
         
         const pages = document.querySelectorAll('.page');
         const searchInput = document.getElementById('main-search');
-        const backButton = document.getElementById('back-button');
         
-        // Header scroll effect
+        let navigationHistory = ['home-page'];
+        let currentHeroMovie = null;
+        
         window.addEventListener('scroll', () => {
             const header = document.querySelector('.header-container');
             if (window.scrollY > 50) {
@@ -759,7 +810,9 @@
             }
         });
         
-        function showPage(pageId) {
+        function showPage(pageId, addToHistory = true) {
+            const currentPage = document.querySelector('.page.active').id;
+            
             pages.forEach(page => {
                 page.classList.add('hidden');
                 page.classList.remove('active');
@@ -769,7 +822,20 @@
             page.classList.remove('hidden');
             page.classList.add('active');
             
+            if (addToHistory && currentPage !== pageId) {
+                navigationHistory.push(currentPage);
+            }
+            
             window.scrollTo(0, 0);
+        }
+        
+        function goBack() {
+            if (navigationHistory.length > 0) {
+                const previousPage = navigationHistory.pop();
+                showPage(previousPage, false);
+                return true;
+            }
+            return false;
         }
         
         async function fetchFromAPI(endpoint) {
@@ -837,11 +903,11 @@
         
         async function initHomePage() {
             try {
-                // Get trending movies for hero and trending section
                 const trendingData = await fetchFromAPI('/trending/movie/day');
                 if (trendingData && trendingData.results && trendingData.results.length > 0) {
-                    // Set hero section
                     const heroMovie = trendingData.results[0];
+                    currentHeroMovie = heroMovie; 
+                    
                     if (heroMovie.backdrop_path) {
                         const heroBackdrop = document.getElementById('hero-backdrop');
                         heroBackdrop.style.backgroundImage = `url(${BACKDROP_BASE_URL}${heroMovie.backdrop_path})`;
@@ -857,14 +923,19 @@
                         showMovieDetails(heroMovie.id);
                     });
                     
-                    // Populate trending section
+                    const moreInfoBtn = document.querySelector('.hero-actions .btn-secondary');
+                    if (moreInfoBtn) {
+                        moreInfoBtn.addEventListener('click', () => {
+                            showMovieDetails(heroMovie.id);
+                        });
+                    }
+                    
                     const trendingContainer = document.getElementById('trending-movies');
                     trendingData.results.slice(0, 12).forEach(movie => {
                         trendingContainer.appendChild(createMovieCard(movie));
                     });
                 }
                 
-                // Get popular movies
                 const popularData = await fetchFromAPI('/movie/popular');
                 if (popularData && popularData.results) {
                     const popularContainer = document.getElementById('popular-movies');
@@ -908,7 +979,6 @@
                 
                 document.getElementById('movie-rating').textContent = `${movieData.vote_average ? movieData.vote_average.toFixed(1) : '0'}/10`;
                 
-                // Add genres
                 const genresContainer = document.getElementById('movie-genres');
                 genresContainer.innerHTML = '';
                 
@@ -921,7 +991,6 @@
                     });
                 }
                 
-                // Set up video player
                 const videoContainer = document.getElementById('video-container');
                 videoContainer.innerHTML = `
                     <iframe
@@ -931,7 +1000,6 @@
                     ></iframe>
                 `;
                 
-                // Get cast information
                 const creditsData = await fetchFromAPI(`/movie/${movieId}/credits`);
                 if (creditsData && creditsData.cast) {
                     const castContainer = document.getElementById('movie-cast');
@@ -975,23 +1043,30 @@
             }
         }
         
-        // Event listeners
         searchInput.addEventListener('keyup', (e) => {
             if (e.key === 'Enter') {
                 handleSearch();
             }
         });
         
-        backButton.addEventListener('click', (e) => {
+        window.addEventListener('popstate', (e) => {
             e.preventDefault();
-            showPage('home-page');
+            goBack();
         });
         
-        // Initialize the app
+        document.querySelector('.logo-container').addEventListener('click', () => {
+            const logo = document.querySelector('.logo-container');
+            logo.classList.add('pulse');
+            setTimeout(() => logo.classList.remove('pulse'), 300);
+            
+            navigationHistory = ['home-page'];
+            showPage('home-page', false);
+        });
+        
         document.addEventListener('DOMContentLoaded', () => {
             initHomePage();
+            navigationHistory = ['home-page']; 
             
-            // Set current time-based greeting
             const greeting = document.querySelector('.greeting');
             const hour = new Date().getHours();
             let greetingText = 'Good ';
